@@ -619,17 +619,22 @@
 
             try {
                 const formData = new FormData(form);
+                console.log('Submitting to:', GAS_WEB_APP_URL);
+                const payload = {
+                    name: formData.get('name'),
+                    message: formData.get('message'),
+                    timestamp: new Date().toISOString()
+                };
+                console.log('Payload:', payload);
+
                 const response = await fetch(GAS_WEB_APP_URL, {
                     method: 'POST',
                     mode: 'cors',
+                    redirect: 'follow',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'Content-Type': 'text/plain',  // Changed from application/json for CORS
                     },
-                    body: JSON.stringify({
-                        name: formData.get('name'),
-                        message: formData.get('message'),
-                        timestamp: new Date().toISOString()
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 const result = await response.json();
@@ -645,9 +650,18 @@
                 form.reset();
             } catch (err) {
                 console.error('Submit error:', err);
+                const errorDetails = err.message || 'Failed to submit. Please try again.';
                 statusDiv.innerHTML = `
                     <div class="text-red-600">
-                        ${err.message || 'Failed to submit. Please try again.'}
+                        <p class="font-bold">Error:</p>
+                        <p class="text-sm">${errorDetails}</p>
+                        <p class="text-xs mt-2">Troubleshooting:</p>
+                        <ul class="text-xs list-disc list-inside mt-1">
+                            <li>Check if the Apps Script URL is correct</li>
+                            <li>Make sure the Apps Script is deployed as a web app</li>
+                            <li>Verify the web app is accessible to "Anyone"</li>
+                            <li>Try running the script directly in the Apps Script editor first</li>
+                        </ul>
                     </div>
                 `;
             } finally {
