@@ -224,6 +224,8 @@
     <script>
         // Spreadsheet ID provided by user
         const SPREADSHEET_ID = '1nFGRs-H6EJbkGtQ2fmzHPyXlWVk4VDwGZf6QrXPsCzg';
+        // Google Apps Script Web App URL for form submissions
+        const GAS_WEB_APP_URL = ''; // TODO: Add your deployed Apps Script URL here
         const navLinks = document.querySelectorAll('.nav-link');
         const sections = document.querySelectorAll('.section-content');
         const apiSelector = document.getElementById('api-selector');
@@ -414,13 +416,45 @@
                                         </tr>
                                     `).join('');
                                 }
-                                // write view — show column list
-                                return data.columns.map(col => `
+                                // write view — show form UI
+                                return `
                                     <tr>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${col.name}</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${col.usage}</td>
+                                        <td colspan="2" class="px-6 py-4">
+                                            <form id="writeLogForm" class="space-y-4" onsubmit="return handleWriteLogSubmit(event)">
+                                                <div>
+                                                    <label for="name" class="block text-sm font-medium text-gray-700">Name</label>
+                                                    <input type="text" name="name" id="name" required
+                                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                                        placeholder="Your name">
+                                                </div>
+                                                <div>
+                                                    <label for="message" class="block text-sm font-medium text-gray-700">Message</label>
+                                                    <textarea name="message" id="message" required rows="3"
+                                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                                        placeholder="Your message"></textarea>
+                                                </div>
+                                                <div class="flex items-center justify-between">
+                                                    <button type="submit" id="submitBtn"
+                                                        class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                                                        Submit Log Entry
+                                                    </button>
+                                                    <div id="submitStatus" class="text-sm"></div>
+                                                </div>
+                                            </form>
+                                        </td>
                                     </tr>
-                                `).join('');
+                                    <tr>
+                                        <td colspan="2" class="px-6 py-4 text-xs text-gray-500">
+                                            <p class="font-semibold mb-2">Expected columns for WriteLog:</p>
+                                            ${data.columns.map(col => `
+                                                <div class="flex items-center space-x-2 mb-1">
+                                                    <span class="font-medium">${col.name}:</span>
+                                                    <span>${col.usage}</span>
+                                                </div>
+                                            `).join('')}
+                                        </td>
+                                    </tr>
+                                `;
                             })()}
                         </tbody>
                     </table>
@@ -551,6 +585,78 @@
                 }
             });
         });
+
+        /**
+         * Handle WriteLog form submission by POSTing to Google Apps Script
+         */
+        async function handleWriteLogSubmit(event) {
+            event.preventDefault();
+            const form = event.target;
+            const submitBtn = form.querySelector('#submitBtn');
+            const statusDiv = form.querySelector('#submitStatus');
+
+            if (!GAS_WEB_APP_URL) {
+                statusDiv.innerHTML = `
+                    <div class="text-red-600">
+                        Error: GAS_WEB_APP_URL not configured. Deploy your Google Apps Script and add the URL.
+                    </div>
+                `;
+                return false;
+            }
+
+            // Disable form while submitting
+            submitBtn.disabled = true;
+            const originalBtnText = submitBtn.innerHTML;
+            submitBtn.innerHTML = `
+                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Submitting...
+            `;
+            statusDiv.innerHTML = '';
+
+            try {
+                const formData = new FormData(form);
+                const response = await fetch(GAS_WEB_APP_URL, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: formData.get('name'),
+                        message: formData.get('message'),
+                        timestamp: new Date().toISOString()
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) throw new Error(result.error || 'Failed to submit');
+
+                // Show success and reset form
+                statusDiv.innerHTML = `
+                    <div class="text-green-600">
+                        Successfully logged! Row ${result.row || 'added'}
+                    </div>
+                `;
+                form.reset();
+            } catch (err) {
+                console.error('Submit error:', err);
+                statusDiv.innerHTML = `
+                    <div class="text-red-600">
+                        ${err.message || 'Failed to submit. Please try again.'}
+                    </div>
+                `;
+            } finally {
+                // Re-enable form
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnText;
+            }
+
+            return false;
+        }
 
         // Initial setup
         document.addEventListener('DOMContentLoaded', () => {
