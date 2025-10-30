@@ -222,6 +222,8 @@
     </main>
 
     <script>
+        // Spreadsheet ID provided by user
+        const SPREADSHEET_ID = '1nFGRs-H6EJbkGtQ2fmzHPyXlWVk4VDwGZf6QrXPsCzg';
         const navLinks = document.querySelectorAll('.nav-link');
         const sections = document.querySelectorAll('.section-content');
         const apiSelector = document.getElementById('api-selector');
@@ -465,7 +467,7 @@
             setActiveSection('stage1');
             renderSheetTable('read');
             createAPIChart();
-            updateVariableContext('SPREADSHEET_ID'); // Default variable context
+            updateVariableContext(SPREADSHEET_ID); // Default variable context
         });
 
     </script>
