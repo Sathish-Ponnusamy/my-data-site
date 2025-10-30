@@ -251,6 +251,36 @@
             }
         };
 
+        // --- Sheet runtime data ---
+        let readDataCols = [];
+        let readDataRows = [];
+
+        /**
+         * Fetch the ReadData sheet via the Google Visualization API and parse rows.
+         * Uses the public `gviz/tq` endpoint so the sheet (or its tab) must be shared publicly.
+         */
+        async function fetchReadData() {
+            const sheetName = 'ReadData';
+            const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?sheet=${encodeURIComponent(sheetName)}&headers=1`;
+            try {
+                const res = await fetch(url);
+                const text = await res.text();
+                // Response is wrapped like: google.visualization.Query.setResponse(...) so extract the JSON
+                const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?\s*$/s);
+                if (!match) throw new Error('Unexpected response from Google Visualization API');
+                const json = JSON.parse(match[1]);
+                const table = json.table || {};
+                readDataCols = (table.cols || []).map(c => c.label || c.id || '');
+                readDataRows = (table.rows || []).map(r => (r.c || []).map(cell => (cell && cell.v != null) ? cell.v : ''));
+            } catch (err) {
+                console.error('fetchReadData error:', err);
+                readDataCols = [];
+                readDataRows = [];
+            }
+            // Re-render the table (if user is viewing read)
+            if (currentSheetView === 'read') renderSheetTable('read');
+        }
+
         const apiData = {
             read: {
                 complexity: 1,
@@ -321,17 +351,33 @@
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Column</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usage</th>
+                                ${(() => {
+                                    // if we've fetched columns for read, render them; otherwise show default headers
+                                    const cols = (type === 'read' && readDataCols.length) ? readDataCols : data.columns.map(c => c.name);
+                                    return cols.map(name => `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${name}</th>`).join('');
+                                })()}
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
-                            ${data.columns.map(col => `
-                                <tr>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${col.name}</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${col.usage}</td>
-                                </tr>
-                            `).join('')}
+                            ${(() => {
+                                if (type === 'read') {
+                                    if (readDataRows.length === 0) {
+                                        return `<tr><td class="px-6 py-4 text-sm text-gray-500" colspan="${(readDataCols.length||data.columns.length)}">No data loaded — make sure the sheet/tab is public and the ID is correct.</td></tr>`;
+                                    }
+                                    return readDataRows.map(row => `
+                                        <tr>
+                                            ${row.map(cell => `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${String(cell)}</td>`).join('')}
+                                        </tr>
+                                    `).join('');
+                                }
+                                // write view — show column list
+                                return data.columns.map(col => `
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${col.name}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${col.usage}</td>
+                                    </tr>
+                                `).join('');
+                            })()}
                         </tbody>
                     </table>
                 </div>
@@ -467,7 +513,9 @@
             setActiveSection('stage1');
             renderSheetTable('read');
             createAPIChart();
-            updateVariableContext(SPREADSHEET_ID); // Default variable context
+            updateVariableContext('SPREADSHEET_ID'); // Default variable context (shows where to set the ID)
+            // Attempt to fetch public ReadData immediately
+            fetchReadData();
         });
 
     </script>
