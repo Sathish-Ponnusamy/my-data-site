@@ -620,21 +620,19 @@
             try {
                 const formData = new FormData(form);
                 console.log('Submitting to:', GAS_WEB_APP_URL);
-                const payload = {
-                    name: formData.get('name'),
-                    message: formData.get('message'),
-                    timestamp: new Date().toISOString()
-                };
-                console.log('Payload:', payload);
-
+                // Use FormData (no explicit Content-Type) to avoid CORS preflight and
+                // let Apps Script read values via e.parameter
+                const postData = new FormData();
+                postData.append('name', formData.get('name'));
+                postData.append('message', formData.get('message'));
+                postData.append('timestamp', new Date().toISOString());
+                console.log('Submitting FormData to:', GAS_WEB_APP_URL);
+                // Send the FormData directly (browser will set multipart/form-data)
                 const response = await fetch(GAS_WEB_APP_URL, {
                     method: 'POST',
                     mode: 'cors',
                     redirect: 'follow',
-                    headers: {
-                        'Content-Type': 'text/plain',  // Changed from application/json for CORS
-                    },
-                    body: JSON.stringify(payload)
+                    body: postData
                 });
 
                 const result = await response.json();
