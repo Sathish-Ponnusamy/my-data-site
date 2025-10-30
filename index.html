@@ -261,21 +261,65 @@
          */
         async function fetchReadData() {
             const sheetName = 'ReadData';
-            const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?sheet=${encodeURIComponent(sheetName)}&headers=1`;
+            // Use tqx=out:json to get cleaner JSON response
+            const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&headers=1&tq=${encodeURIComponent('SELECT *')}`;
+            console.log('Fetching sheet data from:', url);
             try {
-                const res = await fetch(url);
+                const res = await fetch(url, {
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                    mode: 'cors',
+                });
+                console.log('Response status:', res.status);
                 const text = await res.text();
-                // Response is wrapped like: google.visualization.Query.setResponse(...) so extract the JSON
+                console.log('Raw response:', text);
+
+                // Response format should be: google.visualization.Query.setResponse({version:'0.6', status:'ok', sig:'...', table: {...}});
                 const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?\s*$/s);
-                if (!match) throw new Error('Unexpected response from Google Visualization API');
+                if (!match) {
+                    console.error('Failed to extract JSON from response');
+                    throw new Error('Invalid API response format');
+                }
+
                 const json = JSON.parse(match[1]);
+                console.log('Parsed response:', json);
+
+                if (json.status !== 'ok') {
+                    throw new Error(`API returned error status: ${json.status}`);
+                }
+
                 const table = json.table || {};
                 readDataCols = (table.cols || []).map(c => c.label || c.id || '');
+                console.log('Extracted columns:', readDataCols);
+
                 readDataRows = (table.rows || []).map(r => (r.c || []).map(cell => (cell && cell.v != null) ? cell.v : ''));
+                console.log('Extracted rows:', readDataRows);
+
+                if (readDataCols.length === 0) {
+                    throw new Error('No columns found in response');
+                }
             } catch (err) {
                 console.error('fetchReadData error:', err);
+                console.error('Error details:', {
+                    message: err.message,
+                    stack: err.stack,
+                });
                 readDataCols = [];
                 readDataRows = [];
+                // Show error in table
+                sheetTableContainer.innerHTML += `
+                    <div class="p-4 mt-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
+                        <p class="font-bold">Error loading data</p>
+                        <p class="text-sm mt-1">${err.message}</p>
+                        <p class="text-xs mt-2">Make sure:</p>
+                        <ul class="text-xs list-disc list-inside mt-1">
+                            <li>The Google Sheet is publicly viewable (File > Share > Anyone with the link)</li>
+                            <li>The 'ReadData' tab exists and contains data</li>
+                            <li>Your browser allows third-party cookies for Google Sheets</li>
+                        </ul>
+                    </div>
+                `;
             }
             // Re-render the table (if user is viewing read)
             if (currentSheetView === 'read') renderSheetTable('read');
